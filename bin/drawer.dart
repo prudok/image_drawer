@@ -1,53 +1,35 @@
-import 'dart:async';
-import 'dart:io';
-import 'dart:typed_data';
+import 'draw_builder.dart';
+import 'image_builder.dart';
 
-import 'package:canny_edge_detection/canny_edge_detection.dart';
-import 'package:image/image.dart';
+const W = 200.0;
+const H = 200.0;
+const areaLimit = 1.0;
+const width = 1000;
+const height = 1000;
+const threshold = 50;
 
-import './constants.dart';
+Future<void> run() async {
+  final imageBuilder = ImageBuilder('input.png', width, height, threshold);
+  final matImage = await imageBuilder.build();
 
-Future<void> run(Set<Set<Index2d>> edges) async {
-  final socket = await Socket.connect(hostAddress, port);
+  final drawer = DrawBuilder(
+    image: matImage,
+    lineSpacing: 5,
+    areaLimit: (width * height) / (W * H) * areaLimit,
+  );
 
-  bool goodAnswer = true;
+  final path = drawer.pathIterator();
 
-  for (final edge in edges) {
-    if (goodAnswer && edge.isNotEmpty) {
-      final pixel = edge.first;
-      final updatedPath = [1, (pixel.x / width * totalWidth), (pixel.y / height * totalHeight)];
+  for (final element in path) {
+    if (element == (false, -1.0, -1.0)) break;
 
-      final data = ByteData(17);
-      data.setUint8(0, updatedPath[0].toInt());
-      data.setFloat64(1, updatedPath[1].toDouble(), Endian.little);
-      data.setFloat64(9, updatedPath[2].toDouble(), Endian.little);
-      socket.add(data.buffer.asUint8List());
+    final scaledX = (element.$2 / width * W).toStringAsFixed(2);
+    final scaledY = (element.$3 / height * H).toStringAsFixed(2);
 
-      final response = await socket.first;
-
-      if (response.length == 1 && response[0] == 0) {
-        print('Answer from server: [0]');
-        goodAnswer = true;
-      } else {
-        print('Cannot validate response: $response');
-        goodAnswer = false;
-        await Future.delayed(Duration(seconds: 1));
-      }
-
-      await Future.delayed(Duration(milliseconds: 10));
-    }
+    print('Sending path element: (${element.$1}, $scaledX, $scaledY)');
   }
-
-  await socket.close();
 }
 
-Future<void> main(List<String> args) async {
-  final file = File(args.isNotEmpty ? args[0] : 'input.png');
-
-  Image? image = await decodeImageFile(file.path);
-  if (image == null) return;
-
-  final edges = canny(image, blurRadius: 1);
-
-  await run(edges);
+Future<void> main() async {
+  await run();
 }
